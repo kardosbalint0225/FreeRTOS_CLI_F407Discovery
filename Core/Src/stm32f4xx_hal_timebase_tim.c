@@ -4,30 +4,16 @@
   * @file    stm32f4xx_hal_timebase_TIM.c
   * @brief   HAL time base based on the hardware TIM.
   ******************************************************************************
-  * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_tim.h"
 
-/* Private typedef -----------------------------------------------------------*/
-/* Private define ------------------------------------------------------------*/
-/* Private macro -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
+
 TIM_HandleTypeDef        htim7;
-/* Private function prototypes -----------------------------------------------*/
-/* Private functions ---------------------------------------------------------*/
+void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 
 /**
   * @brief  This function configures the TIM7 as a time base source.
@@ -40,49 +26,51 @@ TIM_HandleTypeDef        htim7;
   */
 HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 {
-  RCC_ClkInitTypeDef    clkconfig;
-  uint32_t              uwTimclock = 0;
-  uint32_t              uwPrescalerValue = 0;
-  uint32_t              pFLatency;
-  /*Configure the TIM7 IRQ priority */
-  HAL_NVIC_SetPriority(TIM7_IRQn, TickPriority ,0);
+	RCC_ClkInitTypeDef    clkconfig;
+	uint32_t              uwTimclock = 0;
+	uint32_t              uwPrescalerValue = 0;
+	uint32_t              pFLatency;
+	/*Configure the TIM7 IRQ priority */
+	HAL_NVIC_SetPriority(TIM7_IRQn, TickPriority ,0);
 
-  /* Enable the TIM7 global Interrupt */
-  HAL_NVIC_EnableIRQ(TIM7_IRQn);
+	/* Enable the TIM7 global Interrupt */
+	HAL_NVIC_EnableIRQ(TIM7_IRQn);
 
-  /* Enable TIM7 clock */
-  __HAL_RCC_TIM7_CLK_ENABLE();
+	/* Enable TIM7 clock */
+	__HAL_RCC_TIM7_CLK_ENABLE();
 
-  /* Get clock configuration */
-  HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
+	/* Get clock configuration */
+	HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
 
-  /* Compute TIM7 clock */
-  uwTimclock = 2*HAL_RCC_GetPCLK1Freq();
-  /* Compute the prescaler value to have TIM7 counter clock equal to 1MHz */
-  uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
+	/* Compute TIM7 clock */
+	uwTimclock = 2*HAL_RCC_GetPCLK1Freq();
+	/* Compute the prescaler value to have TIM7 counter clock equal to 1MHz */
+	uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
 
-  /* Initialize TIM7 */
-  htim7.Instance = TIM7;
+	/* Initialize TIM7 */
+	htim7.Instance = TIM7;
 
-  /* Initialize TIMx peripheral as follow:
-  + Period = [(TIM7CLK/1000) - 1]. to have a (1/1000) s time base.
-  + Prescaler = (uwTimclock/1000000 - 1) to have a 1MHz counter clock.
-  + ClockDivision = 0
-  + Counter direction = Up
-  */
-  htim7.Init.Period = (1000000U / 1000U) - 1U;
-  htim7.Init.Prescaler = uwPrescalerValue;
-  htim7.Init.ClockDivision = 0;
-  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+	/* Initialize TIMx peripheral as follow:
+	+ Period = [(TIM7CLK/1000) - 1]. to have a (1/1000) s time base.
+	+ Prescaler = (uwTimclock/1000000 - 1) to have a 1MHz counter clock.
+	+ ClockDivision = 0
+	+ Counter direction = Up
+	*/
+	htim7.Init.Period = (1000000U / 1000U) - 1U;
+	htim7.Init.Prescaler = uwPrescalerValue;
+	htim7.Init.ClockDivision = 0;
+	htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
 
-  if(HAL_TIM_Base_Init(&htim7) == HAL_OK)
-  {
-    /* Start the TIM time Base generation in interrupt mode */
-    return HAL_TIM_Base_Start_IT(&htim7);
-  }
+	if(HAL_TIM_Base_Init(&htim7) == HAL_OK)
+	{
+		HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
 
-  /* Return function status */
-  return HAL_ERROR;
+		/* Start the TIM time Base generation in interrupt mode */
+		return HAL_TIM_Base_Start_IT(&htim7);
+	}
+
+	/* Return function status */
+	return HAL_ERROR;
 }
 
 /**
@@ -93,8 +81,8 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
   */
 void HAL_SuspendTick(void)
 {
-  /* Disable TIM7 update Interrupt */
-  __HAL_TIM_DISABLE_IT(&htim7, TIM_IT_UPDATE);
+	/* Disable TIM7 update Interrupt */
+	__HAL_TIM_DISABLE_IT(&htim7, TIM_IT_UPDATE);
 }
 
 /**
@@ -105,7 +93,20 @@ void HAL_SuspendTick(void)
   */
 void HAL_ResumeTick(void)
 {
-  /* Enable TIM7 Update interrupt */
-  __HAL_TIM_ENABLE_IT(&htim7, TIM_IT_UPDATE);
+	/* Enable TIM7 Update interrupt */
+	__HAL_TIM_ENABLE_IT(&htim7, TIM_IT_UPDATE);
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM7 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	HAL_IncTick();
 }
 

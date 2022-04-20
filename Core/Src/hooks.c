@@ -1,56 +1,15 @@
-/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * File Name          : freertos.c
   * Description        : Code for freertos applications
   ******************************************************************************
-  * @attention
   *
-  * Copyright (c) 2022 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
-
-/* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
-
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN Variables */
-
-/* USER CODE END Variables */
-
-/* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN FunctionPrototypes */
-
-/* USER CODE END FunctionPrototypes */
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
@@ -60,7 +19,7 @@ void vApplicationTickHook(void);
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName);
 void vApplicationMallocFailedHook(void);
 
-/* USER CODE BEGIN 3 */
+
 __weak void vApplicationTickHook( void )
 {
    /* This function will be called by each tick interrupt if
@@ -69,18 +28,16 @@ __weak void vApplicationTickHook( void )
    code must not attempt to block, and only the interrupt safe FreeRTOS API
    functions can be used (those that end in FromISR()). */
 }
-/* USER CODE END 3 */
 
-/* USER CODE BEGIN 4 */
+
 __weak void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
    /* Run time stack overflow checking is performed if
    configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
    called if a stack overflow is detected. */
 }
-/* USER CODE END 4 */
 
-/* USER CODE BEGIN 5 */
+
 __weak void vApplicationMallocFailedHook(void)
 {
    /* vApplicationMallocFailedHook() will only be called if
@@ -94,9 +51,8 @@ __weak void vApplicationMallocFailedHook(void)
    to query the size of free heap space that remains (although it does not
    provide information on how the remaining heap might be fragmented). */
 }
-/* USER CODE END 5 */
 
-/* USER CODE BEGIN GET_IDLE_TASK_MEMORY */
+
 static StaticTask_t xIdleTaskTCBBuffer;
 static StackType_t xIdleStack[configMINIMAL_STACK_SIZE];
 
@@ -107,9 +63,5 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackTy
   *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
   /* place for user code */
 }
-/* USER CODE END GET_IDLE_TASK_MEMORY */
 
-/* Private application code --------------------------------------------------*/
-/* USER CODE BEGIN Application */
 
-/* USER CODE END Application */
