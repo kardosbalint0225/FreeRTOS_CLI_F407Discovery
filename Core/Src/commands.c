@@ -77,6 +77,10 @@ static portBASE_TYPE prvParameterEchoCommand( char *pcWriteBuffer, size_t xWrite
 	static portBASE_TYPE prvStartStopTraceCommand( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
 #endif
 
+
+static portBASE_TYPE get_kernel_version( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
+
+
 /* Structure that defines the "run-time-stats" command line command.   This
 generates a table that shows how much run time each task has */
 static const CLI_Command_Definition_t xRunTimeStats =
@@ -131,6 +135,16 @@ static const CLI_Command_Definition_t xParameterEcho =
 	};
 #endif /* configINCLUDE_TRACE_RELATED_CLI_COMMANDS */
 
+
+static const CLI_Command_Definition_t kernel_version =
+{
+	"kernel-version",
+	"\r\nkernel-version:\r\n Displays the FreeRTOS kernel version number.\r\n",
+	get_kernel_version,
+	0
+};
+
+
 /*-----------------------------------------------------------*/
 
 void vRegisterSampleCLICommands( void )
@@ -140,6 +154,7 @@ void vRegisterSampleCLICommands( void )
 	FreeRTOS_CLIRegisterCommand( &xRunTimeStats );
 	FreeRTOS_CLIRegisterCommand( &xThreeParameterEcho );
 	FreeRTOS_CLIRegisterCommand( &xParameterEcho );
+	FreeRTOS_CLIRegisterCommand( &kernel_version );
 
 	#if( configINCLUDE_TRACE_RELATED_CLI_COMMANDS == 1 )
 	{
@@ -377,3 +392,22 @@ static portBASE_TYPE lParameterNumber = 0;
 	}
 
 #endif /* configINCLUDE_TRACE_RELATED_CLI_COMMANDS */
+
+static portBASE_TYPE get_kernel_version( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
+{
+	/* Remove compile time warnings about unused parameters, and check the
+	write buffer is not NULL.  NOTE - for simplicity, this example assumes the
+	write buffer length is adequate, so does not check for buffer overflows. */
+	( void ) pcCommandString;
+	( void ) xWriteBufferLen;
+	configASSERT( pcWriteBuffer );
+
+	char *freertos_kernel_version_string = "\r\nFreeRTOS Kernel Version: ";
+	strcpy( pcWriteBuffer, freertos_kernel_version_string);
+	strcpy( pcWriteBuffer + strlen(freertos_kernel_version_string), tskKERNEL_VERSION_NUMBER );
+	strcpy( pcWriteBuffer + strlen(freertos_kernel_version_string) + strlen(tskKERNEL_VERSION_NUMBER), "\r\n" );
+
+	/* There is no more data to return after this single string, so return
+	pdFALSE. */
+	return pdFALSE;
+}
