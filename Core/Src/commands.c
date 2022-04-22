@@ -45,6 +45,8 @@
 /* FreeRTOS+CLI includes. */
 #include "FreeRTOS_CLI.h"
 
+#include "rtc.h"
+
 #ifndef  configINCLUDE_TRACE_RELATED_CLI_COMMANDS
 	#define configINCLUDE_TRACE_RELATED_CLI_COMMANDS 0
 #endif
@@ -79,7 +81,18 @@ static portBASE_TYPE prvParameterEchoCommand( char *pcWriteBuffer, size_t xWrite
 
 
 static portBASE_TYPE get_kernel_version( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
+static portBASE_TYPE get_date( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
+static portBASE_TYPE get_time( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
+static portBASE_TYPE set_date( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
+static portBASE_TYPE set_time( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString );
 
+static void convert_time_to_string(uint8_t hours, uint8_t minutes, uint8_t seconds, char *time_string);
+static void convert_date_to_string(uint8_t day, uint8_t month, uint8_t year, char *date_string);
+static void convert_string_to_time(uint8_t *hours, uint8_t *minutes, uint8_t *seconds, char *time_string);
+static void convert_string_to_date(uint8_t *day, uint8_t *month, uint8_t *year, char *date_string);
+static bool is_number(char s);
+static bool is_time_command_string_valid(char *time_string, BaseType_t len);
+static bool is_date_command_string_valid(char *date_string, BaseType_t len);
 
 /* Structure that defines the "run-time-stats" command line command.   This
 generates a table that shows how much run time each task has */
@@ -139,9 +152,43 @@ static const CLI_Command_Definition_t xParameterEcho =
 static const CLI_Command_Definition_t kernel_version =
 {
 	"kernel-version",
-	"\r\nkernel-version:\r\n Displays the FreeRTOS kernel version number.\r\n",
+	"\r\nkernel-version:\r\n Displays the FreeRTOS kernel version number\r\n",
 	get_kernel_version,
 	0
+};
+
+
+static const CLI_Command_Definition_t get_date_cmd = 
+{
+	"date",
+	"\r\ndate:\r\n Displays the date in dd/mm/yy format\r\n",
+	get_date,
+	0
+};
+
+
+static const CLI_Command_Definition_t get_time_cmd =
+{
+	"time",
+	"\r\ntime:\r\n Displays the time in hh:mm:ss format\r\n",
+	get_time,
+	0
+};
+
+static const CLI_Command_Definition_t set_date_cmd = 
+{
+	"set-date",
+	"\r\nset-date <dd/mm/yy>:\r\n Sets the current date\r\n",
+	set_date,
+	1
+};
+
+static const CLI_Command_Definition_t set_time_cmd = 
+{
+	"set-time",
+	"\r\nset-time <hh:mm:ss>:\r\n Sets the current time\r\n",
+	set_time,
+	1
 };
 
 
@@ -155,6 +202,10 @@ void vRegisterSampleCLICommands( void )
 	FreeRTOS_CLIRegisterCommand( &xThreeParameterEcho );
 	FreeRTOS_CLIRegisterCommand( &xParameterEcho );
 	FreeRTOS_CLIRegisterCommand( &kernel_version );
+	FreeRTOS_CLIRegisterCommand( &get_date_cmd );
+	FreeRTOS_CLIRegisterCommand( &get_time_cmd );
+	FreeRTOS_CLIRegisterCommand( &set_date_cmd );
+	FreeRTOS_CLIRegisterCommand( &set_time_cmd );
 
 	#if( configINCLUDE_TRACE_RELATED_CLI_COMMANDS == 1 )
 	{
@@ -395,9 +446,6 @@ static portBASE_TYPE lParameterNumber = 0;
 
 static portBASE_TYPE get_kernel_version( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
 {
-	/* Remove compile time warnings about unused parameters, and check the
-	write buffer is not NULL.  NOTE - for simplicity, this example assumes the
-	write buffer length is adequate, so does not check for buffer overflows. */
 	( void ) pcCommandString;
 	( void ) xWriteBufferLen;
 	configASSERT( pcWriteBuffer );
@@ -407,7 +455,270 @@ static portBASE_TYPE get_kernel_version( char *pcWriteBuffer, size_t xWriteBuffe
 	strcpy( pcWriteBuffer + strlen(freertos_kernel_version_string), tskKERNEL_VERSION_NUMBER );
 	strcpy( pcWriteBuffer + strlen(freertos_kernel_version_string) + strlen(tskKERNEL_VERSION_NUMBER), "\r\n" );
 
-	/* There is no more data to return after this single string, so return
-	pdFALSE. */
 	return pdFALSE;
 }
+
+static portBASE_TYPE get_date( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
+{
+	( void ) pcCommandString;
+	( void ) xWriteBufferLen;
+	configASSERT( pcWriteBuffer );
+
+	uint8_t day;
+	uint8_t month;
+	uint8_t year;
+	RTC_GetDate(&day, &month, &year);
+
+	strcpy(pcWriteBuffer, "\r\n");
+	convert_date_to_string(day, month, year, pcWriteBuffer + 2);
+	strcpy(pcWriteBuffer + 10, "\r\n"); 	
+
+	return pdFALSE;
+}
+
+static portBASE_TYPE get_time( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
+{
+	( void ) pcCommandString;
+	( void ) xWriteBufferLen;
+	configASSERT( pcWriteBuffer );
+
+	uint8_t hours;
+	uint8_t minutes;
+	uint8_t seconds;
+	RTC_GetTime(&hours, &minutes, &seconds);
+
+	strcpy(pcWriteBuffer, "\r\n");
+	convert_time_to_string(hours, minutes, seconds, pcWriteBuffer + 2);
+	strcpy(pcWriteBuffer + 10, "\r\n");
+
+	return pdFALSE;
+}
+
+static portBASE_TYPE set_date( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
+{
+	( void ) xWriteBufferLen;
+	configASSERT( pcWriteBuffer );
+	BaseType_t param_len;
+
+	const char *date_to_set = FreeRTOS_CLIGetParameter(pcCommandString, 1, &param_len);
+	configASSERT( date_to_set );
+	if (true != is_date_command_string_valid(date_to_set, param_len)) {
+		strcpy(pcWriteBuffer, "Invalid parameter.\r\n");
+	} else {
+		uint8_t day;
+		uint8_t month;
+		uint8_t year;
+		
+		convert_string_to_date(&day, &month, &year, date_to_set);
+
+		if (true == RTC_SetDate(day, month, year)) {
+			char *date_set_to_string = "\r\nDate set to ";
+			strcpy(pcWriteBuffer, date_set_to_string);
+
+			uint8_t gday;
+			uint8_t gmonth;
+			uint8_t gyear;
+			RTC_GetDate(&gday, &gmonth, &gyear);
+			convert_date_to_string(gday, gmonth, gyear, pcWriteBuffer + strlen(date_set_to_string));
+			strcpy(pcWriteBuffer + strlen(date_set_to_string) + 8, "\r\n");
+		} else {
+			strcpy(pcWriteBuffer, "Invalid parameter.\r\n");
+		}
+	}
+	
+	return pdFALSE;
+}
+
+static portBASE_TYPE set_time( char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString )
+{
+	( void ) xWriteBufferLen;
+	configASSERT( pcWriteBuffer );
+	BaseType_t param_len;
+
+	const char *time_to_set = FreeRTOS_CLIGetParameter(pcCommandString, 1, &param_len);
+	configASSERT( time_to_set );
+	if (true != is_time_command_string_valid(time_to_set, param_len)) {
+		strcpy(pcWriteBuffer, "Invalid parameter.\r\n");
+	} else {
+		uint8_t hours;
+		uint8_t minutes;
+		uint8_t seconds;
+		
+		convert_string_to_time(&hours, &minutes, &seconds, time_to_set);
+
+		if (true == RTC_SetTime(hours, minutes, seconds)) {
+			char *time_set_to_string = "\r\nTime set to ";
+			strcpy(pcWriteBuffer, time_set_to_string);
+
+			uint8_t ghours;
+			uint8_t gminutes;
+			uint8_t gseconds;
+			RTC_GetTime(&ghours, &gminutes, &gseconds);
+			convert_time_to_string(ghours, gminutes, gseconds, pcWriteBuffer + strlen(time_set_to_string));
+			strcpy(pcWriteBuffer + strlen(time_set_to_string) + 8, "\r\n");
+		} else {
+			strcpy(pcWriteBuffer, "Invalid parameter.\r\n");
+		}
+	}
+
+	return pdFALSE;
+}
+
+static void convert_date_to_string(uint8_t day, uint8_t month, uint8_t year, char *date_string)
+{
+	configASSERT( date_string );
+
+	if (day < 10) {
+		date_string[0] = '0';
+		date_string[1] = (char)day + '0';
+	} else if (day <= 31) {
+		date_string[0] = (char)(day / 10) + '0';
+		date_string[1] = (char)(day % 10) + '0';
+	} else {
+		date_string[0] = '?';
+		date_string[1] = '?';
+	}
+
+	date_string[2] = '/';
+
+	if (month < 10) {
+		date_string[3] = '0';
+		date_string[4] = (char)month + '0';
+	} else if (month <= 12) {
+		date_string[3] = (char)(month / 10) + '0';
+		date_string[4] = (char)(month % 10) + '0';
+	} else {
+		date_string[3] = '?';
+		date_string[4] = '?';
+	}
+
+	date_string[5] = '/';
+
+	if (year < 10) {
+		date_string[6] = '0';
+		date_string[7] = (char)year + '0';
+	} else {
+		date_string[6] = (char)(year / 10) + '0';
+		date_string[7] = (char)(year % 10) + '0';
+	}
+}
+
+static void convert_time_to_string(uint8_t hours, uint8_t minutes, uint8_t seconds, char *time_string)
+{
+	configASSERT( time_string );
+
+	if (hours < 10) {
+		time_string[0] = '0';
+		time_string[1] = (char)hours + '0';
+	} else if (hours <= 23) {
+		time_string[0] = (char)(hours / 10) + '0';
+		time_string[1] = (char)(hours % 10) + '0';
+	} else {
+		time_string[0] = '?';
+		time_string[1] = '?';
+	}
+
+	time_string[2] = ':';
+
+	if (minutes < 10) {
+		time_string[3] = '0';
+		time_string[4] = (char)minutes + '0';
+	} else if (minutes <= 59) {
+		time_string[3] = (char)(minutes / 10) + '0';
+		time_string[4] = (char)(minutes % 10) + '0';
+	} else {
+		time_string[3] = '?';
+		time_string[4] = '?';
+	}
+
+	time_string[5] = ':';
+
+	if (seconds < 10) {
+		time_string[6] = '0';
+		time_string[7] = (char)seconds + '0';
+	} else if (seconds <= 59) {
+		time_string[6] = (char)(seconds / 10) + '0';
+		time_string[7] = (char)(seconds % 10) + '0';
+	} else {
+		time_string[6] = '?';
+		time_string[7] = '?';
+	}
+}
+
+static bool is_number(char s)
+{
+	bool retv = false;
+
+	if (s >= '0' && s <= '9') {
+		retv = true;
+	}
+
+	return retv;
+}
+
+static bool is_time_command_string_valid(char *time_string, BaseType_t len)
+{
+	bool retv = true;
+	if (len < 8) {
+		retv = false;
+	}
+
+	if (time_string[2] != ':' || time_string[5] != ':') {
+		retv = false;
+	}
+
+	uint8_t non_number_chars = 0;
+	for (uint8_t i = 0; i < len; i++) {
+		if (true != is_number(time_string[i])) {
+			non_number_chars = non_number_chars + 1;
+		}
+	}
+
+	if (2 != non_number_chars) {
+		retv = false;
+	}
+
+	return retv;
+}
+
+static bool is_date_command_string_valid(char *date_string, BaseType_t len)
+{
+	bool retv = true;
+	if (len < 8) {
+		retv = false;
+	}
+
+	if (date_string[2] != '/' || date_string[5] != '/') {
+		retv = false;
+	}
+
+	uint8_t non_number_chars = 0;
+	for (uint8_t i = 0; i < len; i++) {
+		if (true != is_number(date_string[i])) {
+			non_number_chars = non_number_chars + 1;
+		}
+	}
+
+	if (2 != non_number_chars) {
+		retv = false;
+	}
+
+	return retv;
+}
+
+static void convert_string_to_time(uint8_t *hours, uint8_t *minutes, uint8_t *seconds, char *time_string)
+{
+	*hours   = (uint8_t)((time_string[0] - '0')*10) + (uint8_t)(time_string[1] - '0');
+	*minutes = (uint8_t)((time_string[3] - '0')*10) + (uint8_t)(time_string[4] - '0');
+	*seconds = (uint8_t)((time_string[6] - '0')*10) + (uint8_t)(time_string[7] - '0');
+}
+
+static void convert_string_to_date(uint8_t *day, uint8_t *month, uint8_t *year, char *date_string)
+{
+	*day   = (uint8_t)((date_string[0] - '0')*10) + (uint8_t)(date_string[1] - '0');
+	*month = (uint8_t)((date_string[3] - '0')*10) + (uint8_t)(date_string[4] - '0');
+	*year  = (uint8_t)((date_string[6] - '0')*10) + (uint8_t)(date_string[7] - '0');
+}
+
+
+
